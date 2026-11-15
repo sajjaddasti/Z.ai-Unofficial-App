@@ -102,11 +102,13 @@ fun WebScreen(
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val data = result.data
-            val clip = data?.clipData
-            val uris: Array<Uri>? = when {
-                clip != null -> Array(clip.count) { clip.getItemAt(it).uri }
-                data?.data != null -> arrayOf(data.data!!)
-                else -> null
+            val clipData = data?.clipData
+            val uris: Array<Uri>? = if (clipData != null) {
+                Array(clipData.itemCount) { index -> clipData.getItemAt(index).uri }
+            } else if (data?.data != null) {
+                arrayOf(data.data!!)
+            } else {
+                null
             }
             vm.deliverFileSelection(uris)
         } else {
