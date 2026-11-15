@@ -1,7 +1,9 @@
 package com.unofficial.zai.ui.screens
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
@@ -19,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -38,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.NavController
 
@@ -66,13 +70,13 @@ fun WebScreen(navController: NavController) {
                 "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 " +
                     "(KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
 
-            CookieManager.getInstance().apply {
-                setAcceptCookie(true)
-                setAcceptThirdPartyCookies(this@apply, true)
-            }
+            // Persist the z.ai session across app restarts.
+            val cookieManager = CookieManager.getInstance()
+            cookieManager.setAcceptCookie(true)
+            cookieManager.setAcceptThirdPartyCookies(this, true)
 
             webViewClient = object : WebViewClient() {
-                override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                     isLoading = true
                     hasError = false
                 }
@@ -101,15 +105,14 @@ fun WebScreen(navController: NavController) {
         if (isOnline) webView.loadUrl(ZAI_URL)
     }
 
-    // Network monitoring
     DisposableEffect(context) {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: android.net.Network) {
+            override fun onAvailable(network: Network) {
                 isOnline = true
             }
 
-            override fun onLost(network: android.net.Network) {
+            override fun onLost(network: Network) {
                 isOnline = isNetworkAvailable(context)
             }
         }
@@ -117,8 +120,8 @@ fun WebScreen(navController: NavController) {
         onDispose { cm.unregisterNetworkCallback(callback) }
     }
 
-    BackHandler {
-        if (webView.canGoBack()) webView.goBack() else Unit
+    BackHandler(enabled = canGoBack) {
+        webView.goBack()
     }
 
     DisposableEffect(Unit) {
@@ -200,7 +203,7 @@ private fun StatusMessage(
     ) {
         Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
         Text(body, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
-        androidx.compose.material3.Button(onClick = onAction) { Text(actionLabel) }
+        Button(onClick = onAction) { Text(actionLabel) }
     }
 }
 

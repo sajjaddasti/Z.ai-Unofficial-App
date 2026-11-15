@@ -3,7 +3,6 @@ package com.unofficial.zai.ui.screens
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.Settings
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.Arrangement
@@ -12,8 +11,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -34,19 +36,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
-import androidx.navigation.NavController
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var biometricEnabled by remember { mutableStateOf(false) }
-    var biometricAvailable by remember {
-        mutableStateOf(
-            BiometricManager.from(context).canAuthenticate(
-                BiometricManager.Authenticators.BIOMETRIC_STRONG
-            ) == BiometricManager.BIOMETRIC_SUCCESS
-        )
+    val biometricAvailable = remember {
+        BiometricManager.from(context).canAuthenticate(
+            BiometricManager.Authenticators.BIOMETRIC_STRONG
+        ) == BiometricManager.BIOMETRIC_SUCCESS
     }
 
     Scaffold(
@@ -65,6 +64,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -133,11 +133,9 @@ fun SettingsScreen(onBack: () -> Unit) {
                 ) {
                     Text("Open z.ai in browser", style = MaterialTheme.typography.titleMedium)
                     IconButton(onClick = {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse("https://z.ai"))
-                        )
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://z.ai")))
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                        Icon(Icons.Filled.OpenInNew, contentDescription = "Open in browser")
                     }
                 }
             }
