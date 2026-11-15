@@ -20,13 +20,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Show Android SDK
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          ls "$ANDROID_HOME/platforms" || true
-          ls "$ANDROID_HOME/build-tools" || true
-
       - name: Ensure SDK packages (best effort)
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
@@ -35,18 +28,45 @@ jobs:
           fi
           if [ -n "$SDKMANAGER" ] && [ -x "$SDKMANAGER" ]; then
             yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
-            "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
-          else
-            echo "sdkmanager not found, relying on preinstalled packages"
+            "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" "platform-tools" || true
           fi
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace --no-daemon
+        id: build
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --stacktrace --no-daemon 2>&1 | tee gradle-build.log
+
+      - name: Publish error summary (public)
+        if: failure()
+        run: |
+          if [ -f gradle-build.log ]; then
+            TAIL=$(tail -n 60 gradle-build.log | sed 's/%/%25/g' | tr '\n' '~' | sed 's/~/%0A/g')
+            echo "::error title=GradleError::$TAIL"
+            {
+              echo '### Gradle tail'
+              echo '```'
+              tail -n 200 gradle-build.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error title=GradleError::no gradle-build.log produced"
+          fi
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-log
+          path: gradle-build.log
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Upload APK artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: zai-unofficial-debug-apk
