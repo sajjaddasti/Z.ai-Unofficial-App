@@ -23,6 +23,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Sign with the debug key so `assembleRelease` produces an installable APK
+            // without needing a private keystore. Fine for a personal sideload build.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

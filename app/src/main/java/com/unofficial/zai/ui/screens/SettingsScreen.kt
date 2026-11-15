@@ -161,10 +161,16 @@ fun SettingsScreen(
                     }
                 )
                 Text(
-                    text = "A blank page usually means the System WebView is outdated. " +
-                        "Tap the arrow to update it in the Play Store.",
+                    text = if (vm.webViewMajor in 1..114) {
+                        "This WebView is too old for z.ai (needs 115 or newer). " +
+                            "Tap the arrow to update it in the Play Store."
+                    } else {
+                        "A blank page usually means the System WebView is outdated. " +
+                            "Tap the arrow to update it in the Play Store."
+                    },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (vm.webViewMajor in 1..114) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))

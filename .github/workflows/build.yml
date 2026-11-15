@@ -34,11 +34,11 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build debug APK
+      - name: Build release APK
         id: build
         run: |
           set -o pipefail
-          ./gradlew assembleDebug --stacktrace --no-daemon 2>&1 | tee gradle-build.log
+          ./gradlew assembleRelease assembleDebug --stacktrace --no-daemon 2>&1 | tee gradle-build.log
 
       - name: Publish error summary (public)
         if: failure()
@@ -69,7 +69,9 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: zai-unofficial-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: zai-unofficial-apk
+          path: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*.apk
           retention-days: 30
           if-no-files-found: error

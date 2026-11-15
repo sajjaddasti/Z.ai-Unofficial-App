@@ -29,6 +29,13 @@ class WebViewModel(app: Application) : AndroidViewModel(app) {
     var errorMessage by mutableStateOf<String?>(null)
     var canGoBack by mutableStateOf(false)
 
+    /** Package name + version of the System WebView in use, e.g. "110.0.5481.154". */
+    var webViewVersion by mutableStateOf("")
+    var webViewMajor by mutableStateOf(0)
+
+    /** Set when the page loaded but could not paint anything (old WebView engines). */
+    var renderFailed by mutableStateOf(false)
+
     var launchFileChooser: ((Intent) -> Unit)? = null
     var launchPermissions: ((Array<String>) -> Unit)? = null
 
@@ -71,6 +78,8 @@ class WebViewModel(app: Application) : AndroidViewModel(app) {
         log("UA=" + view.settings.userAgentString)
         runCatching {
             androidx.webkit.WebViewCompat.getCurrentWebViewPackage(context)?.let {
+                webViewVersion = it.versionName ?: ""
+                webViewMajor = webViewVersion.substringBefore('.').toIntOrNull() ?: 0
                 log("WebView pkg=${it.packageName} v=${it.versionName}")
             }
         }
@@ -80,16 +89,66 @@ class WebViewModel(app: Application) : AndroidViewModel(app) {
             override fun onPageStarted(v: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 isLoading = true
                 errorMessage = null
+                renderFailed = false
+                log("PAGE_START $url")
             }
 
             override fun onPageCommitVisible(v: WebView?, url: String?) {
                 isLoading = false
+                log("PAGE_COMMIT_VISIBLE $url")
             }
 
             override fun onPageFinished(v: WebView?, url: String?) {
                 isLoading = false
                 canGoBack = v?.canGoBack() == true
                 CookieManager.getInstance().flush()
+                log("PAGE_FINISHED $url title=${v?.title}")
+                // Report what actually ended up in the DOM, so a failed hydration is visible.
+                v?.evaluateJavascript(
+                    """(function(){try{
+                        var b=document.body;
+                        var h=document.documentElement;
+                        return 'DOM htmlLen='+(h?h.outerHTML.length:-1)
+                          +' bodyLen='+(b?b.innerHTML.length:-1)
+                          +' text="'+((b&&b.innerText)?b.innerText.slice(0,90).replace(/\s+/g,' '):'none')+'"';
+                    }catch(e){return 'DOM_ERR '+e.message}})()"""
+                ) { result -> log("DOM_RESULT $result") }
+                // Detect a page that technically loaded but painted nothing (happens on old
+                // System WebView builds). Reported back over the console channel.
+                v?.evaluateJavascript(
+                    """(function(){
+                        setTimeout(function(){
+                            try{
+                                function hits(x,y){
+                                    try{ return document.elementsFromPoint(x,y).length; }catch(e){ return -1; }
+                                }
+                                var w=innerWidth, h=innerHeight;
+                                var c=hits(w/2,h/2), a=hits(w*0.25,h*0.6), b=hits(w*0.75,h*0.4);
+                                var painted=0;
+                                try{
+                                    var r=document.createRange();
+                                    r.selectNodeContents(document.body||document.documentElement);
+                                    var rects=r.getClientRects();
+                                    for(var i=0;i<rects.length;i++){
+                                        if(rects[i].width>6&&rects[i].height>6) painted++;
+                                    }
+                                }catch(e){}
+                                console.log('PAINTCHECK c='+c+' a='+a+' b='+b+' painted='+painted);
+                            }catch(e){ console.log('PAINTCHECK err='+e.message); }
+                        }, 4000);
+                    })()"""
+                ) { }
+            }
+
+            override fun onRenderProcessGone(
+                view: WebView?,
+                detail: android.webkit.RenderProcessGoneDetail?
+            ): Boolean {
+                log(
+                    "RENDER_PROCESS_GONE didCrash=${detail?.didCrash()} " +
+                        "priority=${detail?.rendererPriorityAtExit()}"
+                )
+                return true
             }
 
             override fun onReceivedError(
@@ -102,6 +161,8 @@ class WebViewModel(app: Application) : AndroidViewModel(app) {
                     errorMessage = "Couldn't load the page (${error?.errorCode}). " +
                         (error?.description?.toString() ?: "")
                     log("MAIN_FRAME_ERROR ${error?.errorCode} ${error?.description} ${request.url}")
+                } else {
+                    log("SUB_ERROR ${error?.errorCode} ${request?.url}")
                 }
             }
 
@@ -136,6 +197,17 @@ class WebViewModel(app: Application) : AndroidViewModel(app) {
                 val text = "JS ${message?.messageLevel()}: ${message?.message()} " +
                     "(${message?.sourceId()}:${message?.lineNumber()})"
                 log(text)
+                val raw = message?.message().orEmpty()
+                if (raw.startsWith("PAINTCHECK")) {
+                    val v = { name: String ->
+                        Regex("$name=(-?\\d+)").find(raw)?.groupValues?.get(1)?.toIntOrNull()
+                    }
+                    val c = v("c"); val a = v("a"); val b = v("b")
+                    val painted = v("painted") ?: 0
+                    val nothingAtPoints = (c ?: 0) <= 1 && (a ?: 0) <= 1 && (b ?: 0) <= 1
+                    renderFailed = nothingAtPoints || painted < 3
+                    if (renderFailed) log("RENDER_FAILED c=$c a=$a b=$b painted=$painted")
+                }
                 return true
             }
 

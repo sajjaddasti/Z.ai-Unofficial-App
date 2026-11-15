@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,6 +33,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
@@ -69,16 +73,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.unofficial.zai.BuildConfig
+import com.unofficial.zai.CrashStore
 import com.unofficial.zai.ui.web.WebViewModel
 import kotlinx.coroutines.launch
 
@@ -245,7 +255,7 @@ fun WebScreen(
 
                 Spacer(Modifier.weight(1f))
                 Text(
-                    text = "Unofficial client · not affiliated with z.ai",
+                    text = "Unofficial client Â· not affiliated with z.ai",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(20.dp)
@@ -315,7 +325,7 @@ fun WebScreen(
                 val error = vm.errorMessage
                 if (!isOnline) {
                     StatusOverlay(
-                        emoji = "📡",
+                        icon = Icons.Filled.WifiOff,
                         title = "You're offline",
                         body = "Check your connection and try again.",
                         primaryLabel = "Retry",
@@ -327,7 +337,7 @@ fun WebScreen(
                     )
                 } else if (error != null) {
                     StatusOverlay(
-                        emoji = "⚠️",
+                        icon = Icons.Filled.CloudOff,
                         title = "Page failed to load",
                         body = error,
                         primaryLabel = "Retry",
@@ -335,6 +345,22 @@ fun WebScreen(
                             vm.errorMessage = null
                             vm.webView?.reload()
                         },
+                        onSecondary = {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse("https://z.ai"))
+                            )
+                        }
+                    )
+                } else if (vm.renderFailed) {
+                    StatusOverlay(
+                        icon = Icons.Filled.Warning,
+                        title = "Your WebView is too old",
+                        body = "z.ai loaded but couldn't draw anything on " +
+                            (if (vm.webViewVersion.isNotEmpty()) "System WebView ${vm.webViewVersion}"
+                            else "this device's WebView") +
+                            ". Updating it in the Play Store usually fixes this.",
+                        primaryLabel = "Update WebView",
+                        onPrimary = { openWebViewInPlayStore(context) },
                         onSecondary = {
                             context.startActivity(
                                 Intent(Intent.ACTION_VIEW, Uri.parse("https://z.ai"))
@@ -354,6 +380,28 @@ fun WebScreen(
                         color = MaterialTheme.colorScheme.primary,
                         trackColor = MaterialTheme.colorScheme.surfaceVariant
                     )
+                }
+
+                if (BuildConfig.DEBUG) {
+                    val crash = remember { CrashStore.last(context) }
+                    if (crash != null) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .heightIn(max = 300.dp)
+                                .background(Color(0xF0000000))
+                                .padding(6.dp)
+                        ) {
+                            Text(
+                                text = "CRASH:\n" + crash.take(700),
+                                color = Color(0xFF66FF66),
+                                fontSize = 8.sp,
+                                lineHeight = 10.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -427,7 +475,7 @@ private fun DrawerItem(
 
 @Composable
 private fun StatusOverlay(
-    emoji: String,
+    icon: ImageVector,
     title: String,
     body: String,
     primaryLabel: String,
@@ -445,7 +493,12 @@ private fun StatusOverlay(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(emoji, style = MaterialTheme.typography.headlineLarge)
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(44.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
             Text(
                 title,
                 style = MaterialTheme.typography.titleLarge,
@@ -521,6 +574,27 @@ private fun ShimmerSkeleton() {
                     .background(barColor)
             )
             Spacer(Modifier.height(10.dp))
+        }
+    }
+}
+
+private fun openWebViewInPlayStore(context: Context) {
+    val pkg = runCatching {
+        androidx.webkit.WebViewCompat.getCurrentWebViewPackage(context)?.packageName
+    }.getOrNull() ?: "com.google.android.webview"
+    runCatching {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    }.onFailure {
+        runCatching {
+            context.startActivity(
+                Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://play.google.com/store/apps/details?id=$pkg")
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
         }
     }
 }
