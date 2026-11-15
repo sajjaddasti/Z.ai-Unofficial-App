@@ -32,6 +32,9 @@ class WebViewModel(app: Application) : AndroidViewModel(app) {
     var launchFileChooser: ((Intent) -> Unit)? = null
     var launchPermissions: ((Array<String>) -> Unit)? = null
 
+    /** Recent JS console / error messages, newest last. Shown in Settings for troubleshooting. */
+    val consoleLines = androidx.compose.runtime.mutableStateListOf<String>()
+
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var permissionRequest: PermissionRequest? = null
 
@@ -65,6 +68,14 @@ class WebViewModel(app: Application) : AndroidViewModel(app) {
 
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
 
+        log("UA=" + view.settings.userAgentString)
+        runCatching {
+            androidx.webkit.WebViewCompat.getCurrentWebViewPackage(context)?.let {
+                log("WebView pkg=${it.packageName} v=${it.versionName}")
+            }
+        }
+
+
         view.webViewClient = object : WebViewClient() {
             override fun onPageStarted(v: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 isLoading = true
@@ -90,6 +101,7 @@ class WebViewModel(app: Application) : AndroidViewModel(app) {
                     isLoading = false
                     errorMessage = "Couldn't load the page (${error?.errorCode}). " +
                         (error?.description?.toString() ?: "")
+                    log("MAIN_FRAME_ERROR ${error?.errorCode} ${error?.description} ${request.url}")
                 }
             }
 
@@ -120,6 +132,13 @@ class WebViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         view.webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(message: android.webkit.ConsoleMessage?): Boolean {
+                val text = "JS ${message?.messageLevel()}: ${message?.message()} " +
+                    "(${message?.sourceId()}:${message?.lineNumber()})"
+                log(text)
+                return true
+            }
+
             override fun onProgressChanged(v: WebView?, newProgress: Int) {
                 progress = newProgress
                 isLoading = newProgress < 100
@@ -199,8 +218,7 @@ class WebViewModel(app: Application) : AndroidViewModel(app) {
         return view
     }
 
-    fun deliverFileSelection(uris: Array<Uri>?) {
-        fileCallback?.onReceiveValue(uris)
+    fun deliverFileSelection(uris: Array<Uri>?) {        fileCallback?.onReceiveValue(uris)
         fileCallback = null
     }
 
@@ -222,6 +240,12 @@ class WebViewModel(app: Application) : AndroidViewModel(app) {
         fileCallback = null
         webView?.destroy()
         webView = null
+    }
+
+    private fun log(line: String) {
+        android.util.Log.i("ZaiWeb", line)
+        if (consoleLines.size >= 80) consoleLines.removeAt(0)
+        consoleLines.add(line)
     }
 
     private fun openExternal(context: Context, uri: Uri) {

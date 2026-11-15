@@ -52,10 +52,14 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.webkit.WebViewCompat
 import com.unofficial.zai.BuildConfig
+import com.unofficial.zai.ui.web.WebViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    vm: WebViewModel
+) {
     val context = LocalContext.current
     var biometricEnabled by remember { mutableStateOf(false) }
     val biometricAvailable = remember {
@@ -162,6 +166,21 @@ fun SettingsScreen(onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Text(
+                    text = "Web console (last messages)",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = if (vm.consoleLines.isEmpty()) "No messages yet."
+                    else vm.consoleLines.takeLast(12).joinToString("\n"),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TextButton(onClick = { vm.consoleLines.clear() }) { Text("Clear log") }
             }
 
             Section(title = "About") {

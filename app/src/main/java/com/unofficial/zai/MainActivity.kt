@@ -10,8 +10,10 @@ import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.unofficial.zai.ui.navigation.AppNavHost
 import com.unofficial.zai.ui.theme.ZaiTheme
+import com.unofficial.zai.ui.web.WebViewModel
 
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -22,11 +24,12 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             ZaiTheme {
+                val vm: WebViewModel = viewModel()
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppNavHost()
+                    AppNavHost(vm = vm)
                 }
             }
         }
