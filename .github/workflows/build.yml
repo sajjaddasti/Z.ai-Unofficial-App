@@ -44,8 +44,8 @@ jobs:
         if: failure()
         run: |
           if [ -f gradle-build.log ]; then
-            TAIL=$(tail -n 60 gradle-build.log | sed 's/%/%25/g' | tr '\n' '~' | sed 's/~/%0A/g')
-            echo "::error title=GradleError::$TAIL"
+            ERRS=$(grep -nE "^e: |: error:|Unresolved reference|What went wrong|FAILURE:|Caused by|> Task .* FAILED" gradle-build.log | head -n 40 | sed 's/%/%25/g' | tr '\n' '~' | sed 's/~/%0A/g')
+            echo "::error title=GradleErrors::$ERRS"
             {
               echo '### Gradle tail'
               echo '```'
