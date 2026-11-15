@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">z.ai (Unofficial)</string>
+    <string name="shortcut_new_chat_short">New chat</string>
+    <string name="shortcut_new_chat_long">Start a new chat on z.ai</string>
 </resources>

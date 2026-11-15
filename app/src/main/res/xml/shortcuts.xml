@@ -4,8 +4,8 @@
         android:shortcutId="new_chat"
         android:enabled="true"
         android:icon="@mipmap/ic_launcher"
-        android:shortcutShortLabel="@string/app_name"
-        android:shortcutLongLabel="New chat">
+        android:shortcutShortLabel="@string/shortcut_new_chat_short"
+        android:shortcutLongLabel="@string/shortcut_new_chat_long">
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.unofficial.zai"
