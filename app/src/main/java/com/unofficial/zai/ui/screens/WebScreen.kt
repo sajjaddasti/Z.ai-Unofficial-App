@@ -110,7 +110,7 @@ import com.unofficial.zai.ui.components.IconOrb
 import com.unofficial.zai.ui.components.Pill
 import com.unofficial.zai.ui.components.StatusDot
 import com.unofficial.zai.ui.theme.BrandAqua
-import com.unofficial.zai.ui.theme.BrandGradientWide
+import com.unofficial.zai.ui.theme.BrandGradient
 import com.unofficial.zai.ui.theme.BrandMint
 import com.unofficial.zai.ui.theme.BrandViolet
 import com.unofficial.zai.ui.web.WebViewModel
@@ -789,7 +789,7 @@ private fun StatusOverlay(
                                     Modifier
                                         .size(22.dp)
                                         .clip(CircleShape)
-                                        .background(BrandGradientWide[index % BrandGradientWide.size]),
+                                        .background(Brush.linearGradient(BrandGradient)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
