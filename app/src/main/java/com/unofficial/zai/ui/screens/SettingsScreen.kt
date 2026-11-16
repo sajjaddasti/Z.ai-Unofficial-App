@@ -33,8 +33,10 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.BrightnessAuto
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Fingerprint
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.Logout
 import androidx.compose.material.icons.rounded.OpenInNew
@@ -73,6 +75,7 @@ import com.unofficial.zai.ui.components.AccentRule
 import com.unofficial.zai.ui.components.AmbientBackground
 import com.unofficial.zai.ui.components.CircleGlassButton
 import com.unofficial.zai.ui.components.GlassCard
+import com.unofficial.zai.ui.components.GradientButton
 import com.unofficial.zai.ui.components.HairlineDivider
 import com.unofficial.zai.ui.components.IconOrb
 import com.unofficial.zai.ui.components.Pill
@@ -95,17 +98,21 @@ fun SettingsScreen(
             BiometricManager.Authenticators.BIOMETRIC_STRONG
         ) == BiometricManager.BIOMETRIC_SUCCESS
     }
-    val webViewPkg = remember {
-        runCatching {
-            WebViewCompat.getCurrentWebViewPackage(context)?.packageName
-        }.getOrNull() ?: "Unknown"
+    val engineInfo = remember {
+        val pkg = runCatching {
+            WebViewCompat.getCurrentWebViewPackage(context)
+        }.getOrNull()
+        val version = pkg?.versionName?.takeIf { it.isNotBlank() } ?: vm.webViewVersion
+        val name = pkg?.packageName?.takeIf { it.isNotBlank() } ?: vm.webViewPackageName
+        Triple(
+            name,
+            version,
+            version.substringBefore('.').toIntOrNull() ?: vm.webViewMajor
+        )
     }
-    val webViewVer = remember {
-        runCatching {
-            WebViewCompat.getCurrentWebViewPackage(context)?.versionName
-        }.getOrNull() ?: vm.webViewVersion.ifBlank { "Unknown" }
-    }
-    val webViewOutdated = vm.webViewMajor in 1..114
+    val webViewPkg = engineInfo.first.ifBlank { "Unknown" }
+    val webViewVer = engineInfo.second.ifBlank { "Unknown" }
+    val webViewOutdated = engineInfo.third in 1..WebViewModel.OLD_ENGINE_MAX
 
     Box(Modifier.fillMaxSize()) {
         AmbientBackground()
@@ -216,6 +223,38 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(18.dp))
 
+            SettingsSection(title = "Browsing") {
+                SettingRow(
+                    icon = Icons.Rounded.Language,
+                    title = "Desktop site",
+                    subtitle = if (vm.desktopMode)
+                        "Desktop Chrome layout is on \u2014 reloads the page"
+                    else "Mobile layout using the stock WebView agent",
+                    trailing = {
+                        Switch(
+                            checked = vm.desktopMode,
+                            onCheckedChange = { vm.setDesktopMode(context, it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFF04150F),
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                uncheckedBorderColor = MaterialTheme.colorScheme.outline
+                            )
+                        )
+                    }
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = "Turn this on if the mobile page stays blank. It changes the " +
+                        "requested layout, not your account or session.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+
             SettingsSection(title = "Diagnostics") {
                 SettingRow(
                     icon = Icons.Rounded.PhoneAndroid,
@@ -282,6 +321,28 @@ fun SettingsScreen(
                         else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+
+                Spacer(Modifier.height(12.dp))
+                GradientButton(
+                    text = "Copy diagnostics",
+                    icon = Icons.Rounded.ContentCopy,
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
+                            as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(
+                            android.content.ClipData.newPlainText(
+                                "z.ai diagnostics",
+                                vm.diagnostics(context)
+                            )
+                        )
+                        Toast.makeText(
+                            context,
+                            "Diagnostics copied to clipboard",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 Spacer(Modifier.height(18.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {

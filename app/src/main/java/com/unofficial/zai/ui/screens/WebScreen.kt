@@ -52,8 +52,10 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Refresh
@@ -61,10 +63,14 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material.icons.rounded.WifiOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -73,6 +79,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -162,10 +169,11 @@ fun WebScreen(
         vm.launchPermissions = { perms -> runCatching { permissionLauncher.launch(perms) } }
     }
 
-    val webView = remember { vm.obtain(context) }
-
-    LaunchedEffect(Unit) {
-        if (webView.url == null) webView.loadUrl(ZAI_HOME_URL)
+    // A renderer crash drops the dead view and bumps the generation; rebuilding the
+    // AndroidView gives us a fresh renderer instead of a permanently blank page.
+    LaunchedEffect(vm.webViewGeneration) {
+        val fresh = vm.obtain(context)
+        if (fresh.url == null) fresh.loadUrl(ZAI_HOME_URL)
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -217,13 +225,12 @@ fun WebScreen(
                     ?: "Unofficial GLM client",
                 statusColor = when {
                     !isOnline -> MaterialTheme.colorScheme.error
-                    vm.renderFailed -> Color(0xFFFFB020)
+                    vm.renderFailed || vm.blankHint -> Color(0xFFFFB020)
                     else -> BrandMint
                 },
                 onBack = { vm.webView?.goBack() },
                 onNewChat = {
-                    vm.errorMessage = null
-                    vm.renderFailed = false
+                    vm.resetPageState()
                     vm.webView?.loadUrl(ZAI_HOME_URL)
                 },
                 onMenu = { showMenu = true }
@@ -248,10 +255,12 @@ fun WebScreen(
                         shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
                     )
             ) {
-                AndroidView(
-                    factory = { webView },
-                    modifier = Modifier.fillMaxSize()
-                )
+                key(vm.webViewGeneration) {
+                    AndroidView(
+                        factory = { vm.obtain(context) },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
 
                 val error = vm.errorMessage
                 when {
@@ -285,12 +294,12 @@ fun WebScreen(
 
                     vm.renderFailed -> StatusOverlay(
                         icon = Icons.Rounded.WarningAmber,
-                        title = "WebView needs an update",
-                        body = "z.ai finished loading but couldn't draw anything on " +
+                        title = "This WebView is too old",
+                        body = "z.ai needs a Chromium 115+ engine to lay out its interface. " +
                             (if (vm.webViewVersion.isNotEmpty())
-                                "System WebView ${vm.webViewVersion}"
-                            else "this device's WebView") +
-                            ". The chat engine needs Chromium 115 or newer.",
+                                "This device is using System WebView ${vm.webViewVersion}."
+                            else "This device's WebView is below that line.") +
+                            " Updating it usually fixes this in a minute.",
                         steps = listOf(
                             "Open the Play Store and search for \u201CAndroid System WebView\u201D.",
                             "Update it (and Chrome, if present), then come back here.",
@@ -303,10 +312,31 @@ fun WebScreen(
                             context.startActivity(
                                 Intent(Intent.ACTION_VIEW, Uri.parse("https://z.ai"))
                             )
-                        }
+                        },
+                        tertiaryLabel = "Show the page anyway",
+                        onTertiary = { vm.renderFailed = false }
                     )
 
                     !vm.paintChecked -> LoadingSkeleton()
+                }
+
+                if (vm.blankHint && !vm.renderFailed && !vm.isLoading) {
+                    BlankHintCard(
+                        engine = vm.webViewVersion,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(12.dp),
+                        onReload = {
+                            vm.resetPageState()
+                            vm.webView?.reload()
+                        },
+                        onDismiss = { vm.blankHint = false },
+                        onBrowser = {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse("https://z.ai"))
+                            )
+                        }
+                    )
                 }
 
                 if (vm.isLoading && vm.errorMessage == null && isOnline && !vm.renderFailed) {
@@ -369,17 +399,17 @@ fun WebScreen(
             }
         ) {
             MenuSheetContent(
+                desktopMode = vm.desktopMode,
+                onToggleDesktop = { enabled -> vm.setDesktopMode(context, enabled) },
                 onNewChat = {
                     dismissThen {
-                        vm.errorMessage = null
-                        vm.renderFailed = false
+                        vm.resetPageState()
                         vm.webView?.loadUrl(ZAI_HOME_URL)
                     }
                 },
                 onReload = {
                     dismissThen {
-                        vm.errorMessage = null
-                        vm.renderFailed = false
+                        vm.resetPageState()
                         vm.webView?.reload()
                     }
                 },
@@ -404,6 +434,52 @@ fun WebScreen(
                 onAbout = { dismissThen { navController.navigate("settings") } }
             )
         }
+    }
+
+    val jsDialog = vm.dialog
+    if (jsDialog != null) {
+        var dialogText by remember(jsDialog) { mutableStateOf(jsDialog.defaultValue) }
+        AlertDialog(
+            onDismissRequest = {
+                jsDialog.resolve(false)
+                vm.dialog = null
+            },
+            title = { Text("z.ai") },
+            text = {
+                Column {
+                    Text(jsDialog.message)
+                    if (jsDialog.kind == WebViewModel.JsDialog.Kind.Prompt) {
+                        Spacer(Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = dialogText,
+                            onValueChange = { dialogText = it },
+                            singleLine = true
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        jsDialog.resolve(true, dialogText)
+                        vm.dialog = null
+                    }
+                ) { Text("OK") }
+            },
+            dismissButton = if (jsDialog.kind == WebViewModel.JsDialog.Kind.Alert) {
+                null
+            } else {
+                {
+                    TextButton(
+                        onClick = {
+                            jsDialog.resolve(false)
+                            vm.dialog = null
+                        }
+                    ) { Text("Cancel") }
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface
+        )
     }
 }
 
@@ -519,6 +595,8 @@ private fun ZaiHeader(
 
 @Composable
 private fun MenuSheetContent(
+    desktopMode: Boolean,
+    onToggleDesktop: (Boolean) -> Unit,
     onNewChat: () -> Unit,
     onReload: () -> Unit,
     onShare: () -> Unit,
@@ -600,6 +678,14 @@ private fun MenuSheetContent(
                     RoundedCornerShape(22.dp)
                 )
         ) {
+            MenuToggleRow(
+                icon = Icons.Rounded.Language,
+                title = "Desktop site",
+                subtitle = "Load the desktop layout with a Chrome UA",
+                checked = desktopMode,
+                onCheckedChange = onToggleDesktop
+            )
+            HairlineDivider(Modifier.padding(horizontal = 14.dp))
             MenuRow(
                 icon = Icons.Rounded.Settings,
                 title = "Settings",
@@ -696,6 +782,117 @@ private fun MenuRow(
     }
 }
 
+@Composable
+private fun MenuToggleRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconOrb(icon = icon, size = 36.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color(0xFF04150F),
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                uncheckedBorderColor = MaterialTheme.colorScheme.outline
+            )
+        )
+    }
+}
+
+/* ------------------------------------------------------------------------------------------ */
+/* Blank-page hint                                                                             */
+/* ------------------------------------------------------------------------------------------ */
+
+@Composable
+private fun BlankHintCard(
+    engine: String,
+    modifier: Modifier = Modifier,
+    onReload: () -> Unit,
+    onDismiss: () -> Unit,
+    onBrowser: () -> Unit
+) {
+    val shape = RoundedCornerShape(22.dp)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .widthIn(max = 470.dp)
+            .shadow(18.dp, shape, spotColor = Color.Black.copy(alpha = 0.55f))
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f), shape)
+            .padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconOrb(icon = Icons.Rounded.WarningAmber, size = 34.dp)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Page looks empty",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    if (engine.isNotBlank())
+                        "z.ai loaded, but WebView $engine painted nothing."
+                    else
+                        "z.ai loaded, but the page painted nothing.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.width(6.dp))
+            CircleGlassButton(
+                icon = Icons.Rounded.Close,
+                contentDescription = "Dismiss",
+                onClick = onDismiss,
+                size = 32.dp
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GradientButton(
+                text = "Reload",
+                onClick = onReload,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(
+                onClick = onBrowser,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(54.dp)
+            ) {
+                Text(
+                    "Open in browser",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
 /* ------------------------------------------------------------------------------------------ */
 /* Overlays                                                                                    */
 /* ------------------------------------------------------------------------------------------ */
@@ -709,7 +906,9 @@ private fun StatusOverlay(
     onPrimary: () -> Unit,
     secondaryLabel: String? = null,
     onSecondary: (() -> Unit)? = null,
-    steps: List<String> = emptyList()
+    steps: List<String> = emptyList(),
+    tertiaryLabel: String? = null,
+    onTertiary: (() -> Unit)? = null
 ) {
     Box(Modifier.fillMaxSize()) {
         AmbientBackground()
@@ -827,6 +1026,16 @@ private fun StatusOverlay(
                         secondaryLabel,
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (tertiaryLabel != null && onTertiary != null) {
+                TextButton(onClick = onTertiary) {
+                    Text(
+                        tertiaryLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                     )
                 }
             }
