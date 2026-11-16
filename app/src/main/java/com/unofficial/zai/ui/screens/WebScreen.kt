@@ -10,56 +10,64 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.WifiOff
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.OpenInNew
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.Button
-import androidx.compose.material3.DrawerValue
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.WarningAmber
+import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.NavigationDrawerItem
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -71,7 +79,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -79,6 +89,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -89,6 +100,19 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.unofficial.zai.BuildConfig
 import com.unofficial.zai.CrashStore
+import com.unofficial.zai.ui.components.AmbientBackground
+import com.unofficial.zai.ui.components.BrandMark
+import com.unofficial.zai.ui.components.CircleGlassButton
+import com.unofficial.zai.ui.components.GlassCard
+import com.unofficial.zai.ui.components.GradientButton
+import com.unofficial.zai.ui.components.HairlineDivider
+import com.unofficial.zai.ui.components.IconOrb
+import com.unofficial.zai.ui.components.Pill
+import com.unofficial.zai.ui.components.StatusDot
+import com.unofficial.zai.ui.theme.BrandAqua
+import com.unofficial.zai.ui.theme.BrandGradientWide
+import com.unofficial.zai.ui.theme.BrandMint
+import com.unofficial.zai.ui.theme.BrandViolet
 import com.unofficial.zai.ui.web.WebViewModel
 import kotlinx.coroutines.launch
 
@@ -102,9 +126,10 @@ fun WebScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
     val lifecycleOwner = LocalLifecycleOwner.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+    var showMenu by remember { mutableStateOf(false) }
     var isOnline by remember { mutableStateOf(isNetworkAvailable(context)) }
 
     val filePicker = rememberLauncherForActivityResult(
@@ -133,12 +158,8 @@ fun WebScreen(
     }
 
     SideEffect {
-        vm.launchFileChooser = { intent ->
-            runCatching { filePicker.launch(intent) }
-        }
-        vm.launchPermissions = { perms ->
-            runCatching { permissionLauncher.launch(perms) }
-        }
+        vm.launchFileChooser = { intent -> runCatching { filePicker.launch(intent) } }
+        vm.launchPermissions = { perms -> runCatching { permissionLauncher.launch(perms) } }
     }
 
     val webView = remember { vm.obtain(context) }
@@ -172,150 +193,60 @@ fun WebScreen(
         onDispose { runCatching { cm.unregisterNetworkCallback(callback) } }
     }
 
-    BackHandler(enabled = drawerState.isOpen || vm.canGoBack) {
-        if (drawerState.isOpen) {
-            scope.launch { drawerState.close() }
-        } else {
-            vm.webView?.goBack()
+    BackHandler(enabled = !showMenu && vm.canGoBack) {
+        vm.webView?.goBack()
+    }
+
+    val dismissThen: (() -> Unit) -> Unit = { action ->
+        scope.launch { sheetState.hide() }.invokeOnCompletion {
+            showMenu = false
+            action()
         }
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet(
-                drawerContainerColor = MaterialTheme.colorScheme.surface
-            ) {
-                DrawerHeader()
-                HorizontalDivider()
-                Spacer(Modifier.height(8.dp))
-
-                DrawerItem(
-                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                    label = "New chat"
-                ) {
-                    scope.launch { drawerState.close() }
-                    vm.webView?.loadUrl(ZAI_HOME_URL)
-                }
-                DrawerItem(
-                    icon = { Icon(Icons.Filled.Home, contentDescription = null) },
-                    label = "Home"
-                ) {
-                    scope.launch { drawerState.close() }
-                    vm.webView?.loadUrl(ZAI_HOME_URL)
-                }
-                DrawerItem(
-                    icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
-                    label = "Reload page"
-                ) {
-                    scope.launch { drawerState.close() }
-                    vm.errorMessage = null
-                    vm.webView?.reload()
-                }
-                DrawerItem(
-                    icon = { Icon(Icons.Filled.OpenInNew, contentDescription = null) },
-                    label = "Open in browser"
-                ) {
-                    scope.launch { drawerState.close() }
-                    context.startActivity(
-                        Intent(Intent.ACTION_VIEW, Uri.parse("https://z.ai"))
-                    )
-                }
-                DrawerItem(
-                    icon = { Icon(Icons.Filled.Share, contentDescription = null) },
-                    label = "Share app"
-                ) {
-                    scope.launch { drawerState.close() }
-                    val send = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(
-                            Intent.EXTRA_TEXT,
-                            "Unofficial z.ai client: https://github.com/sajjaddasti/Z.ai-Unofficial-App"
-                        )
-                    }
-                    context.startActivity(Intent.createChooser(send, "Share app"))
-                }
-
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-
-                DrawerItem(
-                    icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
-                    label = "Settings"
-                ) {
-                    scope.launch { drawerState.close() }
-                    navController.navigate("settings")
-                }
-                DrawerItem(
-                    icon = { Icon(Icons.Filled.Info, contentDescription = null) },
-                    label = "About"
-                ) {
-                    scope.launch { drawerState.close() }
-                    navController.navigate("settings")
-                }
-
-                Spacer(Modifier.weight(1f))
-                Text(
-                    text = "Unofficial client Â· not affiliated with z.ai",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(20.dp)
-                )
-            }
-        }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            BrandBadge()
-                            Spacer(Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    "z.ai",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    "GLM chat",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Filled.Menu, contentDescription = "Menu")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = { vm.webView?.loadUrl(ZAI_HOME_URL) }) {
-                            Icon(Icons.Filled.Add, contentDescription = "New chat")
-                        }
-                        IconButton(
-                            onClick = {
-                                vm.errorMessage = null
-                                vm.webView?.reload()
-                            }
-                        ) {
-                            Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
-                        }
-                        IconButton(onClick = { navController.navigate("settings") }) {
-                            Icon(Icons.Filled.Settings, contentDescription = "Settings")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface
-                    )
-                )
-            }
-        ) { padding ->
+        Column(Modifier.fillMaxSize()) {
+            ZaiHeader(
+                canGoBack = vm.canGoBack,
+                title = "z.ai",
+                subtitle = vm.pageTitle.takeIf { it.isNotBlank() }
+                    ?: "Unofficial GLM client",
+                statusColor = when {
+                    !isOnline -> MaterialTheme.colorScheme.error
+                    vm.renderFailed -> Color(0xFFFFB020)
+                    else -> BrandMint
+                },
+                onBack = { vm.webView?.goBack() },
+                onNewChat = {
+                    vm.errorMessage = null
+                    vm.renderFailed = false
+                    vm.webView?.loadUrl(ZAI_HOME_URL)
+                },
+                onMenu = { showMenu = true }
+            )
+
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .padding(horizontal = 8.dp)
+                    .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+                    .border(
+                        width = 1.dp,
+                        brush = Brush.verticalGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.08f),
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                            )
+                        ),
+                        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
+                    )
             ) {
                 AndroidView(
                     factory = { webView },
@@ -323,62 +254,66 @@ fun WebScreen(
                 )
 
                 val error = vm.errorMessage
-                if (!isOnline) {
-                    StatusOverlay(
-                        icon = Icons.Filled.WifiOff,
+                when {
+                    !isOnline -> StatusOverlay(
+                        icon = Icons.Rounded.WifiOff,
                         title = "You're offline",
-                        body = "Check your connection and try again.",
-                        primaryLabel = "Retry",
+                        body = "Reconnect to continue talking to GLM. Your session is kept safe.",
+                        primaryLabel = "Try again",
                         onPrimary = {
                             isOnline = isNetworkAvailable(context)
                             if (isOnline) vm.webView?.reload()
-                        },
-                        onSecondary = null
+                        }
                     )
-                } else if (error != null) {
-                    StatusOverlay(
-                        icon = Icons.Filled.CloudOff,
+
+                    error != null -> StatusOverlay(
+                        icon = Icons.Rounded.CloudOff,
                         title = "Page failed to load",
                         body = error,
-                        primaryLabel = "Retry",
+                        primaryLabel = "Reload page",
                         onPrimary = {
                             vm.errorMessage = null
                             vm.webView?.reload()
                         },
+                        secondaryLabel = "Open in browser",
                         onSecondary = {
                             context.startActivity(
                                 Intent(Intent.ACTION_VIEW, Uri.parse("https://z.ai"))
                             )
                         }
                     )
-                } else if (vm.renderFailed) {
-                    StatusOverlay(
-                        icon = Icons.Filled.Warning,
-                        title = "Your WebView is too old",
-                        body = "z.ai loaded but couldn't draw anything on " +
-                            (if (vm.webViewVersion.isNotEmpty()) "System WebView ${vm.webViewVersion}"
+
+                    vm.renderFailed -> StatusOverlay(
+                        icon = Icons.Rounded.WarningAmber,
+                        title = "WebView needs an update",
+                        body = "z.ai finished loading but couldn't draw anything on " +
+                            (if (vm.webViewVersion.isNotEmpty())
+                                "System WebView ${vm.webViewVersion}"
                             else "this device's WebView") +
-                            ". Updating it in the Play Store usually fixes this.",
+                            ". The chat engine needs Chromium 115 or newer.",
+                        steps = listOf(
+                            "Open the Play Store and search for \u201CAndroid System WebView\u201D.",
+                            "Update it (and Chrome, if present), then come back here.",
+                            "Restart this app \u2014 the chat will render normally."
+                        ),
                         primaryLabel = "Update WebView",
                         onPrimary = { openWebViewInPlayStore(context) },
+                        secondaryLabel = "Continue in browser",
                         onSecondary = {
                             context.startActivity(
                                 Intent(Intent.ACTION_VIEW, Uri.parse("https://z.ai"))
                             )
                         }
                     )
-                } else if (vm.progress in 0..8) {
-                    ShimmerSkeleton()
+
+                    !vm.paintChecked -> LoadingSkeleton()
                 }
 
-                if (vm.isLoading && vm.errorMessage == null && isOnline) {
-                    LinearProgressIndicator(
-                        modifier = Modifier
+                if (vm.isLoading && vm.errorMessage == null && isOnline && !vm.renderFailed) {
+                    LoadingLine(
+                        Modifier
+                            .align(Alignment.TopCenter)
                             .fillMaxWidth()
-                            .height(2.dp)
-                            .align(Alignment.TopCenter),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant
                     )
                 }
 
@@ -386,16 +321,23 @@ fun WebScreen(
                     val crash = remember { CrashStore.last(context) }
                     if (crash != null) {
                         Box(
-                            modifier = Modifier
+                            Modifier
                                 .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
-                                .heightIn(max = 300.dp)
-                                .background(Color(0xF0000000))
-                                .padding(6.dp)
+                                .heightIn(max = 280.dp)
+                                .padding(8.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color(0xF00B0F14))
+                                .border(
+                                    1.dp,
+                                    Color(0xFFFF7A6E).copy(alpha = 0.5f),
+                                    RoundedCornerShape(16.dp)
+                                )
+                                .padding(12.dp)
                         ) {
                             Text(
-                                text = "CRASH:\n" + crash.take(700),
-                                color = Color(0xFF66FF66),
+                                text = "CRASH LOG\n" + crash.take(700),
+                                color = Color(0xFF7CF7B8),
                                 fontSize = 8.sp,
                                 lineHeight = 10.sp,
                                 fontFamily = FontFamily.Monospace
@@ -406,72 +348,357 @@ fun WebScreen(
             }
         }
     }
-}
 
-@Composable
-private fun BrandBadge() {
-    Box(
-        modifier = Modifier
-            .size(32.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.primary,
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
-                    )
+    if (showMenu) {
+        ModalBottomSheet(
+            onDismissRequest = { showMenu = false },
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            scrimColor = Color.Black.copy(alpha = 0.62f),
+            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+            dragHandle = {
+                Box(
+                    Modifier
+                        .padding(top = 12.dp, bottom = 4.dp)
+                        .width(38.dp)
+                        .height(4.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f))
                 )
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            "Z",
-            color = MaterialTheme.colorScheme.onPrimary,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
-@Composable
-private fun DrawerHeader() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 24.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        BrandBadge()
-        Spacer(Modifier.width(12.dp))
-        Column {
-            Text(
-                "z.ai",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                "Unofficial client",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        ) {
+            MenuSheetContent(
+                onNewChat = {
+                    dismissThen {
+                        vm.errorMessage = null
+                        vm.renderFailed = false
+                        vm.webView?.loadUrl(ZAI_HOME_URL)
+                    }
+                },
+                onReload = {
+                    dismissThen {
+                        vm.errorMessage = null
+                        vm.renderFailed = false
+                        vm.webView?.reload()
+                    }
+                },
+                onShare = {
+                    dismissThen {
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(
+                                Intent.EXTRA_TEXT,
+                                "Unofficial z.ai client: https://github.com/sajjaddasti/Z.ai-Unofficial-App"
+                            )
+                        }
+                        context.startActivity(Intent.createChooser(send, "Share app"))
+                    }
+                },
+                onBrowser = {
+                    dismissThen {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://z.ai")))
+                    }
+                },
+                onSettings = { dismissThen { navController.navigate("settings") } },
+                onAbout = { dismissThen { navController.navigate("settings") } }
             )
         }
     }
 }
 
+/* ------------------------------------------------------------------------------------------ */
+/* Header                                                                                      */
+/* ------------------------------------------------------------------------------------------ */
+
 @Composable
-private fun DrawerItem(
-    icon: @Composable () -> Unit,
-    label: String,
-    onClick: () -> Unit
+private fun ZaiHeader(
+    canGoBack: Boolean,
+    title: String,
+    subtitle: String,
+    statusColor: Color,
+    onBack: () -> Unit,
+    onNewChat: () -> Unit,
+    onMenu: () -> Unit
 ) {
-    NavigationDrawerItem(
-        label = { Text(label) },
-        icon = icon,
-        selected = false,
-        onClick = onClick,
-        modifier = Modifier.padding(horizontal = 12.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        AnimatedVisibility(
+            visible = canGoBack,
+            enter = fadeIn(tween(180)) + expandHorizontally(tween(180)),
+            exit = fadeOut(tween(140)) + shrinkHorizontally(tween(140))
+        ) {
+            CircleGlassButton(
+                icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                contentDescription = "Back",
+                onClick = onBack
+            )
+        }
+
+        val shape = RoundedCornerShape(22.dp)
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .height(60.dp)
+                .shadow(
+                    elevation = 18.dp,
+                    shape = shape,
+                    ambientColor = BrandMint.copy(alpha = 0.16f),
+                    spotColor = Color.Black.copy(alpha = 0.35f)
+                )
+                .clip(shape)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.surface,
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.90f)
+                        )
+                    )
+                )
+                .border(
+                    width = 1.dp,
+                    brush = Brush.verticalGradient(
+                        listOf(
+                            Color.White.copy(alpha = 0.12f),
+                            MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+                        )
+                    ),
+                    shape = shape
+                )
+                .padding(start = 10.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BrandMark(size = 38.dp, corner = 13.dp)
+            Spacer(Modifier.width(11.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = (-0.2).sp
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    StatusDot(color = statusColor, size = 5.dp)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Spacer(Modifier.width(6.dp))
+            CircleGlassButton(
+                icon = Icons.Rounded.Add,
+                contentDescription = "New chat",
+                onClick = onNewChat,
+                size = 38.dp
+            )
+            Spacer(Modifier.width(6.dp))
+            CircleGlassButton(
+                icon = Icons.Rounded.MoreHoriz,
+                contentDescription = "More",
+                onClick = onMenu,
+                size = 38.dp
+            )
+        }
+    }
+}
+
+/* ------------------------------------------------------------------------------------------ */
+/* Menu sheet                                                                                  */
+/* ------------------------------------------------------------------------------------------ */
+
+@Composable
+private fun MenuSheetContent(
+    onNewChat: () -> Unit,
+    onReload: () -> Unit,
+    onShare: () -> Unit,
+    onBrowser: () -> Unit,
+    onSettings: () -> Unit,
+    onAbout: () -> Unit
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp)
+            .padding(top = 4.dp, bottom = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BrandMark(size = 48.dp, corner = 16.dp)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "z.ai",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "Unofficial GLM client",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Pill(
+                text = "v" + BuildConfig.VERSION_NAME,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            SectionLabel("Shortcuts")
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                QuickTile(
+                    icon = Icons.Rounded.AutoAwesome,
+                    label = "New chat",
+                    onClick = onNewChat,
+                    modifier = Modifier.weight(1f)
+                )
+                QuickTile(
+                    icon = Icons.Rounded.Refresh,
+                    label = "Reload",
+                    onClick = onReload,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                QuickTile(
+                    icon = Icons.Rounded.Share,
+                    label = "Share app",
+                    onClick = onShare,
+                    modifier = Modifier.weight(1f)
+                )
+                QuickTile(
+                    icon = Icons.Rounded.OpenInNew,
+                    label = "In browser",
+                    onClick = onBrowser,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(22.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+                    RoundedCornerShape(22.dp)
+                )
+        ) {
+            MenuRow(
+                icon = Icons.Rounded.Settings,
+                title = "Settings",
+                subtitle = "Appearance, security, session",
+                onClick = onSettings
+            )
+            HairlineDivider(Modifier.padding(horizontal = 14.dp))
+            MenuRow(
+                icon = Icons.Rounded.Info,
+                title = "About & diagnostics",
+                subtitle = "Version, WebView health, source code",
+                onClick = onAbout
+            )
+        }
+
+        Text(
+            text = "Unofficial client \u00B7 not affiliated with z.ai",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        letterSpacing = 1.2.sp,
+        modifier = Modifier.padding(start = 4.dp)
     )
 }
+
+@Composable
+private fun QuickTile(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(20.dp)
+    Column(
+        modifier = modifier
+            .height(98.dp)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f), shape)
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        IconOrb(icon = icon, size = 36.dp)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
+private fun MenuRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconOrb(icon = icon, size = 36.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Icon(
+            Icons.Rounded.ChevronRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
+
+/* ------------------------------------------------------------------------------------------ */
+/* Overlays                                                                                    */
+/* ------------------------------------------------------------------------------------------ */
 
 @Composable
 private fun StatusOverlay(
@@ -480,103 +707,254 @@ private fun StatusOverlay(
     body: String,
     primaryLabel: String,
     onPrimary: () -> Unit,
-    onSecondary: (() -> Unit)?
+    secondaryLabel: String? = null,
+    onSecondary: (() -> Unit)? = null,
+    steps: List<String> = emptyList()
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentAlignment = Alignment.Center
-    ) {
+    Box(Modifier.fillMaxSize()) {
+        AmbientBackground()
         Column(
-            modifier = Modifier.padding(32.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 26.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.Center
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(44.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
+            Box(
+                modifier = Modifier
+                    .size(74.dp)
+                    .shadow(
+                        elevation = 22.dp,
+                        shape = RoundedCornerShape(26.dp),
+                        ambientColor = BrandMint.copy(alpha = 0.35f),
+                        spotColor = BrandViolet.copy(alpha = 0.30f)
+                    )
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.surface,
+                                MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        )
+                    )
+                    .border(
+                        1.dp,
+                        Brush.linearGradient(
+                            listOf(BrandMint.copy(alpha = 0.45f), Color.Transparent)
+                        ),
+                        RoundedCornerShape(26.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(30.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(Modifier.height(24.dp))
             Text(
-                title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
                 textAlign = TextAlign.Center
             )
+            Spacer(Modifier.height(10.dp))
             Text(
-                body,
+                text = body,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 360.dp)
             )
-            Spacer(Modifier.height(4.dp))
-            Button(onClick = onPrimary) { Text(primaryLabel) }
-            if (onSecondary != null) {
-                OutlinedButton(onClick = onSecondary) { Text("Open in browser") }
+
+            if (steps.isNotEmpty()) {
+                Spacer(Modifier.height(22.dp))
+                GlassCard(
+                    corner = 22.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 380.dp)
+                ) {
+                    Column(
+                        Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        steps.forEachIndexed { index, step ->
+                            Row(verticalAlignment = Alignment.Top) {
+                                Box(
+                                    Modifier
+                                        .size(22.dp)
+                                        .clip(CircleShape)
+                                        .background(BrandGradientWide[index % BrandGradientWide.size]),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "${index + 1}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF04150F)
+                                    )
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    text = step,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(28.dp))
+            GradientButton(
+                text = primaryLabel,
+                onClick = onPrimary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 380.dp)
+            )
+
+            if (secondaryLabel != null && onSecondary != null) {
+                Spacer(Modifier.height(6.dp))
+                TextButton(onClick = onSecondary) {
+                    Text(
+                        secondaryLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
+    }
+}
+
+/* ------------------------------------------------------------------------------------------ */
+/* Loading                                                                                     */
+/* ------------------------------------------------------------------------------------------ */
+
+@Composable
+private fun LoadingLine(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "topline")
+    val x by transition.animateFloat(
+        initialValue = -0.4f,
+        targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1250, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "x"
+    )
+    BoxWithConstraints(
+        modifier
+            .height(2.5.dp)
+            .clip(CircleShape)
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+        )
+        Box(
+            Modifier
+                .offset(x = maxWidth * x)
+                .width(maxWidth * 0.42f)
+                .fillMaxHeight()
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(Color.Transparent, BrandMint, BrandAqua, Color.Transparent)
+                    )
+                )
+        )
     }
 }
 
 @Composable
-private fun ShimmerSkeleton() {
-    val transition = rememberInfiniteTransition(label = "shimmer")
+private fun LoadingSkeleton() {
+    val transition = rememberInfiniteTransition(label = "skeleton")
     val alpha by transition.animateFloat(
-        initialValue = 0.12f,
-        targetValue = 0.30f,
+        initialValue = 0.35f,
+        targetValue = 0.75f,
         animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = LinearEasing),
+            animation = tween(1100, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "alpha"
     )
-    val barColor = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
+    val bar = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha * 0.16f)
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        repeat(2) { row ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .background(barColor)
-                )
-                Spacer(Modifier.width(12.dp))
-                Box(
-                    Modifier
-                        .height(14.dp)
-                        .fillMaxWidth(0.4f)
-                        .clip(RoundedCornerShape(7.dp))
-                        .background(barColor)
-                )
+    Box(Modifier.fillMaxSize()) {
+        AmbientBackground()
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(Modifier.alpha(alpha)) {
+                BrandMark(size = 62.dp, corner = 20.dp)
             }
-            Spacer(Modifier.height(6.dp))
-            Box(
-                Modifier
-                    .fillMaxWidth(if (row % 2 == 0) 0.95f else 0.75f)
-                    .height(12.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(barColor)
+            Spacer(Modifier.height(20.dp))
+            Text(
+                "Connecting to z.ai",
+                style = MaterialTheme.typography.titleMedium
             )
-            Box(
-                Modifier
-                    .fillMaxWidth(0.6f)
-                    .height(12.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(barColor)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Warming up GLM\u2026",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(34.dp))
+
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 420.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                repeat(3) { index ->
+                    Row(Modifier.fillMaxWidth()) {
+                        Box(
+                            Modifier
+                                .size(30.dp)
+                                .clip(CircleShape)
+                                .background(bar)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(
+                            Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth(if (index == 2) 0.45f else 0.62f)
+                                    .height(12.dp)
+                                    .clip(CircleShape)
+                                    .background(bar)
+                            )
+                            Box(
+                                Modifier
+                                    .fillMaxWidth(if (index == 1) 1f else 0.86f)
+                                    .height(10.dp)
+                                    .clip(CircleShape)
+                                    .background(bar.copy(alpha = alpha * 0.10f))
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
+
+/* ------------------------------------------------------------------------------------------ */
 
 private fun openWebViewInPlayStore(context: Context) {
     val pkg = runCatching {

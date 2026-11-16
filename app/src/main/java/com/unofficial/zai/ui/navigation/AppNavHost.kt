@@ -6,10 +6,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.unofficial.zai.ui.screens.SettingsScreen
 import com.unofficial.zai.ui.screens.WebScreen
+import com.unofficial.zai.ui.theme.ThemeMode
 import com.unofficial.zai.ui.web.WebViewModel
 
 @Composable
-fun AppNavHost(vm: WebViewModel) {
+fun AppNavHost(
+    vm: WebViewModel,
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit
+) {
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = "web") {
         composable("web") {
@@ -21,7 +26,9 @@ fun AppNavHost(vm: WebViewModel) {
         composable("settings") {
             SettingsScreen(
                 onBack = { navController.popBackStack() },
-                vm = vm
+                vm = vm,
+                themeMode = themeMode,
+                onThemeModeChange = onThemeModeChange
             )
         }
     }

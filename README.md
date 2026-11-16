@@ -1,24 +1,67 @@
-# z.ai Unofficial (Android, native shell + WebView)
+# z.ai Unofficial — native Android client
 
-Native Kotlin + Jetpack Compose Android app that wraps the z.ai web app in a
-WebView. No API key required — you log in through the real z.ai website inside
-the app, so SSO/2FA/CAPTCHA all work. Session cookies persist across restarts.
+A small, polished Android shell for [z.ai](https://chat.z.ai) built with Kotlin and
+Jetpack Compose. You sign in on the real z.ai website inside a private WebView —
+no API key, no scraping, no token hacking. SSO, 2FA and CAPTCHA all work because
+the login *is* the website. Session cookies persist across restarts.
 
-## Open in Android Studio
-1. File → Open → select this `zai-unofficial` folder.
-2. Let Gradle sync.
-3. Run on a device/emulator (minSdk 26).
+## Highlights
 
-## Features
-- Material 3 with dynamic color (Material You)
-- Edge-to-edge, immersive status bar
-- Splash screen (Android 12+ API)
-- Pull-to-refresh
-- Native offline / error screen with retry
-- Cookie/session persistence across restarts
-- App shortcuts (long-press icon → "New chat")
-- Biometric lock toggle (optional, in settings)
+- **2026-era UI** — floating glass header, mint→aqua gradient accents, rounded
+  cards, animated loading state and a proper bottom sheet instead of a drawer.
+- **Theme control** — Auto / Light / Dark, remembered between launches.
+- **Edge-to-edge** — content flows under the system bars with correct insets.
+- **Session aware** — cookies are flushed on pause, kept across restarts, and can
+  be cleared from Settings.
+- **Resilient** — offline screen, HTTP/error screen, and a WebView compatibility
+  screen that explains exactly what to do when the engine is too old.
+- **Native plumbing** — file uploads, camera/mic permissions, downloads, external
+  links, Android app shortcuts, optional biometric lock.
+- **Diagnostics** — live WebView version and a built-in JS console log.
 
-## Notes
-- This is an unofficial client. Use at your own risk; z.ai may change their site.
-- Rename/rebrand before any public distribution; do not use z.ai trademarks.
+## Requirements
+
+- Android 8.0 (API 26) or newer.
+- **Android System WebView 115+**. z.ai uses modern CSS that older Chromium
+  engines (for example the AOSP WebView 110 shipped in some emulators and old
+  ROMs) cannot lay out — the page loads but paints nothing. The app detects this
+  and offers a one-tap Play Store update instead of showing a blank screen.
+
+## Install
+
+1. Grab `zai-unofficial-<version>.apk` from the latest GitHub Actions artifact or
+   Release.
+2. Sideload it and open the app, then log in normally on the z.ai page.
+
+## Build
+
+```bash
+# JDK 17 + Android SDK 34 required
+./gradlew assembleRelease      # signed with the debug key, ready to sideload
+./gradlew assembleDebug
+```
+
+CI (`.github/workflows/build.yml`) builds both variants on every push to `main`
+and uploads them as the `zai-unofficial-apk` artifact.
+
+## Why updating WebView from the Play Store sometimes does nothing
+
+Android chooses the WebView provider from the system image, not from whatever APK
+you install. On many emulators (and some ROMs) the provider is the AOSP stub
+`com.android.webview`, which cannot be replaced by the Play Store package
+`com.google.android.webview` — the install is ignored or fails with a signature
+mismatch. On a normal retail phone the Play Store version *is* the provider, so
+updating "Android System WebView" (and Chrome) fixes rendering after a restart.
+Settings → Diagnostics always shows the engine package and version actually in
+use.
+
+## Privacy
+
+- Login happens on `chat.z.ai`; credentials are never seen by this app.
+- Cookies live in the WebView's private storage on your device.
+- No analytics, no ads, no third-party SDKs.
+
+## Disclaimer
+
+Unofficial project. Not affiliated with, endorsed by, or supported by z.ai.
+z.ai and GLM are trademarks of their respective owners. Use at your own risk.

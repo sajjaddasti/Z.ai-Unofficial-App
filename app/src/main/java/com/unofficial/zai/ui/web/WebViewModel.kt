@@ -29,12 +29,22 @@ class WebViewModel(app: Application) : AndroidViewModel(app) {
     var errorMessage by mutableStateOf<String?>(null)
     var canGoBack by mutableStateOf(false)
 
+    /** Live page title / URL, used for the header subtitle. */
+    var pageTitle by mutableStateOf("")
+    var currentUrl by mutableStateOf("")
+
     /** Package name + version of the System WebView in use, e.g. "110.0.5481.154". */
     var webViewVersion by mutableStateOf("")
     var webViewMajor by mutableStateOf(0)
 
     /** Set when the page loaded but could not paint anything (old WebView engines). */
     var renderFailed by mutableStateOf(false)
+
+    /** True once the paint probe has reported (or timed out) for the current page. */
+    var paintChecked by mutableStateOf(false)
+
+    /** Bumped per navigation so a stale timeout cannot mark the new page as checked. */
+    private var pageGen = 0
 
     var launchFileChooser: ((Intent) -> Unit)? = null
     var launchPermissions: ((Array<String>) -> Unit)? = null
@@ -90,6 +100,8 @@ class WebViewModel(app: Application) : AndroidViewModel(app) {
                 isLoading = true
                 errorMessage = null
                 renderFailed = false
+                paintChecked = false
+                pageGen++
                 log("PAGE_START $url")
             }
 
@@ -98,9 +110,17 @@ class WebViewModel(app: Application) : AndroidViewModel(app) {
                 log("PAGE_COMMIT_VISIBLE $url")
             }
 
+            override fun doUpdateVisitedHistory(v: WebView?, url: String?, isReload: Boolean) {
+                canGoBack = v?.canGoBack() == true
+                currentUrl = url.orEmpty()
+                pageTitle = v?.title.orEmpty()
+            }
+
             override fun onPageFinished(v: WebView?, url: String?) {
                 isLoading = false
                 canGoBack = v?.canGoBack() == true
+                pageTitle = v?.title.orEmpty()
+                currentUrl = url.orEmpty()
                 CookieManager.getInstance().flush()
                 log("PAGE_FINISHED $url title=${v?.title}")
                 // Report what actually ended up in the DOM, so a failed hydration is visible.
@@ -114,10 +134,12 @@ class WebViewModel(app: Application) : AndroidViewModel(app) {
                     }catch(e){return 'DOM_ERR '+e.message}})()"""
                 ) { result -> log("DOM_RESULT $result") }
                 // Detect a page that technically loaded but painted nothing (happens on old
-                // System WebView builds). Reported back over the console channel.
+                // System WebView builds). Reported back over the console channel. A second
+                // probe runs only when the first one looks blank, so slow hydration is not
+                // mistaken for a dead engine.
                 v?.evaluateJavascript(
                     """(function(){
-                        setTimeout(function(){
+                        function probe(tag){
                             try{
                                 function hits(x,y){
                                     try{ return document.elementsFromPoint(x,y).length; }catch(e){ return -1; }
@@ -133,11 +155,28 @@ class WebViewModel(app: Application) : AndroidViewModel(app) {
                                         if(rects[i].width>6&&rects[i].height>6) painted++;
                                     }
                                 }catch(e){}
-                                console.log('PAINTCHECK c='+c+' a='+a+' b='+b+' painted='+painted);
-                            }catch(e){ console.log('PAINTCHECK err='+e.message); }
-                        }, 4000);
+                                var failed = ((c<=1&&a<=1&&b<=1) || painted===0);
+                                console.log('PAINTCHECK'+tag+' c='+c+' a='+a+' b='+b+' painted='+painted+' failed='+(failed?1:0));
+                                return failed;
+                            }catch(e){
+                                console.log('PAINTCHECK'+tag+' err='+e.message);
+                                return false;
+                            }
+                        }
+                        setTimeout(function(){
+                            if (probe('')) {
+                                setTimeout(function(){ probe('2'); }, 1500);
+                            }
+                        }, 900);
                     })()"""
                 ) { }
+                val gen = pageGen
+                v?.postDelayed({
+                    if (gen == pageGen && !paintChecked) {
+                        paintChecked = true
+                        log("PAINT_TIMEOUT (no probe report)")
+                    }
+                }, 7000)
             }
 
             override fun onRenderProcessGone(
@@ -199,14 +238,26 @@ class WebViewModel(app: Application) : AndroidViewModel(app) {
                 log(text)
                 val raw = message?.message().orEmpty()
                 if (raw.startsWith("PAINTCHECK")) {
-                    val v = { name: String ->
-                        Regex("$name=(-?\\d+)").find(raw)?.groupValues?.get(1)?.toIntOrNull()
+                    if (raw.contains("err=")) {
+                        // Probe failed for an unrelated reason: never block the UI on it.
+                        renderFailed = false
+                        paintChecked = true
+                        return true
                     }
-                    val c = v("c"); val a = v("a"); val b = v("b")
-                    val painted = v("painted") ?: 0
-                    val nothingAtPoints = (c ?: 0) <= 1 && (a ?: 0) <= 1 && (b ?: 0) <= 1
-                    renderFailed = nothingAtPoints || painted < 3
-                    if (renderFailed) log("RENDER_FAILED c=$c a=$a b=$b painted=$painted")
+                    val secondPass = raw.startsWith("PAINTCHECK2")
+                    val failed = Regex("failed=(\\d)").find(raw)?.groupValues
+                        ?.getOrNull(1) == "1"
+                    if (failed && !secondPass) {
+                        // Give hydration another moment before blaming the engine.
+                        log("RENDER_RETRY $raw")
+                    } else if (failed) {
+                        renderFailed = true
+                        paintChecked = true
+                        log("RENDER_FAILED $raw")
+                    } else {
+                        renderFailed = false
+                        paintChecked = true
+                    }
                 }
                 return true
             }
